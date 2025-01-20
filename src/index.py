@@ -14,6 +14,12 @@ def get_route():
     # SQL-Abfrage erstellen (dynamisch mit start_point und end_point)
     # ... (Hier die SQL-Abfrage einfügen, start_node_id und end_node_id ermitteln)
 
+    sql_query = f"""
+        SELECT ST_AsGeoJSON(ST_MakeLine(n1.geom, n2.geom)) AS route, n1.id AS start_node_id, n2.id AS end_node_id
+        FROM nodes n1, nodes n2
+        WHERE n1.id = {start_node_id} AND n2.id = {end_node_id}
+    """
+
     with engine.connect() as conn:
         result = conn.execute(sql_query)
         rows = result.fetchall()
@@ -25,3 +31,4 @@ def get_route():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
