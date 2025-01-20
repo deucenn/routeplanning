@@ -28,7 +28,6 @@ def get_route():
     print("Query send")
 
     # Ergebnis in JSON umwandeln
-    # ... (Hier die Ergebnisse in ein JSON-Format umwandeln)
 
     return jsonify(result)
 
