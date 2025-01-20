@@ -6,6 +6,8 @@ app = Flask(__name__)
 
 engine = create_engine('postgresql://user:password@host:port/database')
 
+print("Connection to database established")
+
 @app.route('/route', methods=['GET'])
 def get_route():
     start_point = request.args.get('start')  # z.B. 'SRID=4326;POINT(10.0 50.0)'
@@ -14,15 +16,17 @@ def get_route():
     # SQL-Abfrage erstellen (dynamisch mit start_point und end_point)
     # ... (Hier die SQL-Abfrage einfügen, start_node_id und end_node_id ermitteln)
 
-    sql_query = f"""
+    sql_query = """
         SELECT ST_AsGeoJSON(ST_MakeLine(n1.geom, n2.geom)) AS route, n1.id AS start_node_id, n2.id AS end_node_id
         FROM nodes n1, nodes n2
-        WHERE n1.id = {start_node_id} AND n2.id = {end_node_id}
+        WHERE n1.id = {start_node} AND n2.id = {end_node}
     """
 
     with engine.connect() as conn:
         result = conn.execute(sql_query)
         rows = result.fetchall()
+
+    print("Query send")
 
     # Ergebnis in JSON umwandeln
     # ... (Hier die Ergebnisse in ein JSON-Format umwandeln)
