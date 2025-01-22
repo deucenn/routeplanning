@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GeoJSON Visualisierung</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+      #map {
+        height: 600px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+      // JSON-Daten aus deiner Ausgabe
+      const geojsonData = [
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809318.902675232,6658557.141498905],[809394.36615804,6658529.723270452],[809414.136499605,6658523.361828113],[809421.405662354,6658522.100201868],[809428.051435954,6658521.975816195],[809433.717598036,6658522.793207808]]}"
+  },
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809433.717598036,6658522.793207808],[809438.949614103,6658525.174305594],[809444.949734657,6658528.408335041],[809451.050042752,6658532.868454662],[809457.48430932,6658537.950506282],[809480.0932979,6658558.189897024]]}"
+  },
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809480.0932979,6658558.189897024],[809484.824376259,6658563.98274327],[809489.833753345,6658569.953288482],[809493.76333137,6658573.844806898],[809497.670645496,6658576.741235053]]}"
+  },
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809641.217128874,6658683.963106646],[809669.3253003,6658697.272648124],[809723.938642483,6658731.319584397],[809754.484710757,6658746.672737705],[809806.626760244,6658764.851334942],[809829.937061616,6658774.180542756],[809842.649747465,6658781.555066936],[809856.598079661,6658795.397866409],[809881.622701192,6658824.913849527],[809909.20767101,6658852.119825913],[809925.015038703,6658864.096881422],[809936.302835069,6658871.755808897]]}"
+  },
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809936.302835069,6658871.755808897],[809957.041656204,6658883.501880973],[809975.264656847,6658890.05907529],[809989.758454548,6658892.902304809]]}"
+  },
+  {
+    "st_asgeojson": "{\"type\":\"LineString\",\"crs\":{\"type\":\"name\",\"properties\":{\"name\":\"EPSG:3857\"}},\"coordinates\":[[809989.758454548,6658892.902304809],[809999.131555673,6658893.950745949],[810035.499633315,6658895.478982419],[810076.231434996,6658895.212429524]]}"
+  }
+];
+
+      // Leaflet-Karte erstellen
+      const map = L.map("map").setView([0, 0], 2); // Initiale Ansicht (wird angepasst)
+
+      // OpenStreetMap Tiles hinzufügen
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "© OpenStreetMap contributors",
+      }).addTo(map);
+
+      // GeoJSON-Daten parsen und zur Karte hinzufügen
+      geojsonData.forEach((item) => {
+        const geojsonObject = JSON.parse(item.st_asgeojson);
+        const coords = geojsonObject.coordinates.map((coord) => {
+          return L.CRS.EPSG3857.unproject(L.point(coord[0], coord[1]));
+        });
+
+        L.polyline(coords, { color: "blue" }).addTo(map);
+      });
+
+      // Karte auf die Bounds der Linien zentrieren
+      const bounds = L.latLngBounds([]);
+      geojsonData.forEach((item) => {
+        const geojsonObject = JSON.parse(item.st_asgeojson);
+        geojsonObject.coordinates.forEach((coord) => {
+          bounds.extend(L.CRS.EPSG3857.unproject(L.point(coord[0], coord[1])));
+        });
+      });
+      map.fitBounds(bounds);
+    </script>
+  </body>
+</html>
