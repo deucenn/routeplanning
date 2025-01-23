@@ -170,3 +170,54 @@ WHERE id IN (
         7106  -- Zielknoten
     )
 );
+
+
+
+-- NEUER ANSATZ NACH https://workshop.pgrouting.org/2.1.0-dev/en/chapters/topology.html#load
+
+CREATE TABLE wuppertal_roads_topology AS
+SELECT r.*
+FROM planet_osm_roads r,
+     (SELECT way FROM planet_osm_polygon
+      WHERE name = 'Wuppertal' AND boundary = 'administrative' AND admin_level = '6') AS wuppertal_boundary
+WHERE ST_Within(r.way, wuppertal_boundary.way);
+
+-- Vorbereiten für pgr_createTopology
+ALTER TABLE wuppertal_roads_topology ADD COLUMN "source" integer;
+ALTER TABLE wuppertal_roads_topology ADD COLUMN "target" integer;
+
+-- SRID abfragen zur Toleranzbestimmung. SRID == 3857 => 1.00 als Toleranzwert, entspricht 1m
+SELECT find_srid('public','wuppertal_roads_topology','way');
+
+-- pgr_createTopology mit der Toleranz von 1m
+SELECT pgr_createTopology('wuppertal_roads_topology', 1.0000, 'way', 'osm_id');
+
+-- Topologie analysieren
+SELECT pgr_analyzeGraph('wuppertal_roads_topology', 1.000000, the_geom := 'way', id := 'osm_id');
+
+-- Kosten hinzufügen
+ALTER TABLE wuppertal_roads_topology ADD COLUMN length DOUBLE PRECISION;
+UPDATE wuppertal_roads_topology SET length = ST_Length(ST_Transform(way, 4326)::geography);
+
+
+-- Dikstra-Algorithmus vorbereiten
+SELECT osm_id, id FROM wuppertal_roads_topology_vertices_pgr
+    WHERE osm_id IN (33180347, 253908904, 332656435, 3068609695, 277708679)
+    ORDER BY osm_id;
+
+-- Dijkastra-Algorithmus anwenden
+SELECT * FROM pgr_dijkstra('
+    SELECT osm_id AS id,
+         source,
+         target,
+         length AS cost
+        FROM wuppertal_roads_topology',
+    597, 303, directed := false);
+
+-- GeoJSON Output
+SELECT ST_AsGeoJSON(way)
+FROM wuppertal_roads_topology
+WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, length as cost FROM wuppertal_roads_topology',
+    1,  -- Startknoten
+    569, -- Zielknoten
+    directed := false));
