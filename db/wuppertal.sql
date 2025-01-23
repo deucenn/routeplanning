@@ -17,7 +17,7 @@ WHERE highway NOT IN ('motorway', 'trunk', 'primary', 'secondary', 'tertiary', '
 -- Knoten erzeugen:
 CREATE TABLE wuppertal_nodes AS
 SELECT row_number() OVER () AS id, (ST_DumpPoints(way)).geom AS geom
-FROM wuppertal_roads_no_null;
+FROM wuppertal_roads;
 
 -- Straßennetz mit Knoten verknüpfen:
 ALTER TABLE wuppertal_roads ADD COLUMN source BIGINT;
@@ -77,12 +77,12 @@ FROM pgr_dijkstra(
 JOIN wuppertal_roads r ON route.edge = r.osm_id
 JOIN wuppertal_nodes w ON route.node = w.id;
 
--- Route visualisieren:
+-- Route visualisieren (689 - 7109 ergibt einen Route):
 SELECT ST_AsGeoJSON(way)
-FROM wuppertal_roads
-WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, cost, reverse_cost FROM wuppertal_roads',
-    345,  -- Startknoten
-    2169, -- Zielknoten
+FROM wuppertal_roads_filtered
+WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, cost, reverse_cost FROM wuppertal_roads_filtered',
+    689,  -- Startknoten
+    7109, -- Zielknoten
     directed := false));
 
 -- DEBUGGING
@@ -124,6 +124,7 @@ DELETE FROM wuppertal_roads
 WHERE source = target;
 
 -- NEUER TEST:
+-- Den Start- und Endpunkten der Linie den nächstgelegenen Knotenn zuweisen:
 ALTER TABLE wuppertal_roads ADD COLUMN source_geom geometry;
 ALTER TABLE wuppertal_roads ADD COLUMN target_geom geometry;
 
@@ -155,13 +156,12 @@ INSERT INTO wuppertal_roads_directed
 SELECT target, source, length_m FROM wuppertal_roads;
 
 ALTER TABLE wuppertal_roads_directed ADD COLUMN id SERIAL PRIMARY KEY;
-ALTER TABLE wuppertal_roads_directed ADD COLUMN geom
 
 -- pgRouting
 SELECT * FROM pgr_dijkstra('SELECT id, source, target, length_m::double precision AS cost FROM wuppertal_roads_directed', 2196, 210);
 
 SELECT ST_AsGeoJSON(way)
-FROM wuppertal_roads
+FROM wuppertal_roads_directed
 WHERE id IN (
     SELECT edge
     FROM pgr_dijkstra(
@@ -172,8 +172,29 @@ WHERE id IN (
 );
 
 
+-- Bushaltestellen durch public_transport == platform dargestellt
 
--- NEUER ANSATZ NACH https://workshop.pgrouting.org/2.1.0-dev/en/chapters/topology.html#load
+SELECT pgr_createTopology('wuppertal_roads', 1.0, 'way', 'osm_id');
+
+SELECT DISTINCT highway, public_transport
+FROM wuppertal_roads;
+
+CREATE TABLE wuppertal_roads_filtered AS
+SELECT * FROM wuppertal_roads
+WHERE "highway" NOT IN ('bus_stop', 'platform', 'footway', 'path')
+  AND "public_transport" IS NULL;
+
+-- ALle Knoten des Ways betrachten:
+SELECT (dp).path[1] AS node_position,
+       (dp).geom AS node_geom
+FROM (
+    SELECT ST_DumpPoints(way) AS dp
+    FROM planet_osm_line
+    WHERE osm_id = 1153231506
+) AS points;
+
+-- Die Start und Endknoten verwenden.
+-- TODO: Topologie erstellen, auf Basis der topologischen Netzwerkstruktur Routing durchführen.
 
 CREATE TABLE wuppertal_roads_topology AS
 SELECT r.*
@@ -195,14 +216,17 @@ SELECT pgr_createTopology('wuppertal_roads_topology', 1.0000, 'way', 'osm_id');
 -- Topologie analysieren
 SELECT pgr_analyzeGraph('wuppertal_roads_topology', 1.000000, the_geom := 'way', id := 'osm_id');
 
+-- Daten anpassen
+SELECT * FROM pgr_analyzeGraph('wuppertal_roads_topology', 1.0) WHERE isolated = true;
+
 -- Kosten hinzufügen
 ALTER TABLE wuppertal_roads_topology ADD COLUMN length DOUBLE PRECISION;
 UPDATE wuppertal_roads_topology SET length = ST_Length(ST_Transform(way, 4326)::geography);
 
 
 -- Dikstra-Algorithmus vorbereiten
-SELECT osm_id, id FROM wuppertal_roads_topology_vertices_pgr
-    WHERE osm_id IN (33180347, 253908904, 332656435, 3068609695, 277708679)
+SELECT osm_id, source, target FROM wuppertal_roads_topology
+    WHERE osm_id IN (240943960, 477449989, 193966767)
     ORDER BY osm_id;
 
 -- Dijkastra-Algorithmus anwenden
@@ -212,12 +236,34 @@ SELECT * FROM pgr_dijkstra('
          target,
          length AS cost
         FROM wuppertal_roads_topology',
-    597, 303, directed := false);
+    16, 3334, directed := false);
 
 -- GeoJSON Output
 SELECT ST_AsGeoJSON(way)
 FROM wuppertal_roads_topology
 WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, length as cost FROM wuppertal_roads_topology',
-    1,  -- Startknoten
-    569, -- Zielknoten
+    16,  -- Startknoten
+    3334, -- Zielknoten
     directed := false));
+
+-- Auf gesamten Ddatensatz beziehen
+ALTER TABLE planet_osm_roads ADD COLUMN "source" integer;
+ALTER TABLE planet_osm_roads ADD COLUMN "target" integer;
+
+SELECT find_srid('public','planet_osm_roads','way');
+
+SELECT pgr_createTopology('planet_osm_roads', 1.0000, 'way', 'osm_id');
+
+SELECT pgr_analyzeGraph('planet_osm_roads', 1.000000, the_geom := 'way', id := 'osm_id');
+
+
+-- TODO: Toleranzwert erhöhen und analysieren
+    -- 5.0 & 10.0 ausprobiert: geringfügig besser
+
+-- Spalten nullen
+UPDATE wuppertal_roads_topology
+SET source = NULL,
+    target = NULL,
+    length = NULL;
+
+DROP TABLE wuppertal_roads_topology_vertices_pgr;
