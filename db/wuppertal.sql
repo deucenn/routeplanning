@@ -196,6 +196,8 @@ FROM (
 -- Die Start und Endknoten verwenden.
 -- TODO: Topologie erstellen, auf Basis der topologischen Netzwerkstruktur Routing durchführen.
 
+
+-- Ansatz nach: https://workshop.pgrouting.org/2.1.0-dev/en/chapters/topology.html#load
 CREATE TABLE wuppertal_roads_topology AS
 SELECT r.*
 FROM planet_osm_roads r,
@@ -216,9 +218,6 @@ SELECT pgr_createTopology('wuppertal_roads_topology', 1.0000, 'way', 'osm_id');
 -- Topologie analysieren
 SELECT pgr_analyzeGraph('wuppertal_roads_topology', 1.000000, the_geom := 'way', id := 'osm_id');
 
--- Daten anpassen
-SELECT * FROM pgr_analyzeGraph('wuppertal_roads_topology', 1.0) WHERE isolated = true;
-
 -- Kosten hinzufügen
 ALTER TABLE wuppertal_roads_topology ADD COLUMN length DOUBLE PRECISION;
 UPDATE wuppertal_roads_topology SET length = ST_Length(ST_Transform(way, 4326)::geography);
@@ -236,17 +235,53 @@ SELECT * FROM pgr_dijkstra('
          target,
          length AS cost
         FROM wuppertal_roads_topology',
-    16, 3334, directed := false);
+    873, 5, directed := false);
 
 -- GeoJSON Output
 SELECT ST_AsGeoJSON(way)
 FROM wuppertal_roads_topology
 WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, length as cost FROM wuppertal_roads_topology',
-    16,  -- Startknoten
-    3334, -- Zielknoten
+    2768,  -- Startknoten
+    738, -- Zielknoten
     directed := false));
 
--- Auf gesamten Ddatensatz beziehen
+-- Auf Deutschland beziehen
+CREATE TABLE germany_roads AS
+SELECT r.*
+FROM planet_osm_roads r,
+     (SELECT way FROM planet_osm_polygon
+      WHERE name = 'Deutschland'
+        AND boundary = 'administrative'
+        AND admin_level = '2') AS germany_boundary
+WHERE ST_Within(r.way, germany_boundary.way);
+
+ALTER TABLE germany_roads ADD COLUMN "source" integer;
+ALTER TABLE germany_roads ADD COLUMN "target" integer;
+
+SELECT pgr_createTopology('germany_roads', 1.0000, 'way', 'osm_id');
+
+SELECT pgr_analyzeGraph('germany_roads', 1.000000, the_geom := 'way', id := 'osm_id');
+
+ALTER TABLE germany_roads ADD COLUMN length DOUBLE PRECISION;
+UPDATE germany_roads SET length = ST_Length(ST_Transform(way, 4326)::geography);
+
+SELECT * FROM pgr_dijkstra('
+    SELECT osm_id AS id,
+         source,
+         target,
+         length AS cost
+        FROM germany_roads',
+    873, 5, directed := false);
+
+SELECT ST_AsGeoJSON(way)
+FROM germany_roads
+WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, length as cost FROM germany_roads
+',
+    6001264,  -- Startknoten
+    2084647, -- Zielknoten
+    directed := false));
+
+-- Auf gesamten Datensatz beziehen
 ALTER TABLE planet_osm_roads ADD COLUMN "source" integer;
 ALTER TABLE planet_osm_roads ADD COLUMN "target" integer;
 
@@ -256,6 +291,23 @@ SELECT pgr_createTopology('planet_osm_roads', 1.0000, 'way', 'osm_id');
 
 SELECT pgr_analyzeGraph('planet_osm_roads', 1.000000, the_geom := 'way', id := 'osm_id');
 
+ALTER TABLE planet_osm_roads ADD COLUMN length DOUBLE PRECISION;
+UPDATE planet_osm_roads SET length = ST_Length(ST_Transform(way, 4326)::geography);
+
+SELECT * FROM pgr_dijkstra('
+    SELECT osm_id AS id,
+         source,
+         target,
+         length AS cost
+        FROM planet_osm_roads',
+    873, 5, directed := false);
+
+SELECT ST_AsGeoJSON(way)
+FROM planet_osm_roads
+WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, target, length as cost FROM planet_osm_roads',
+    16786,  -- Startknoten
+    158099, -- Zielknoten
+    directed := false));
 
 -- TODO: Toleranzwert erhöhen und analysieren
     -- 5.0 & 10.0 ausprobiert: geringfügig besser
@@ -267,3 +319,20 @@ SET source = NULL,
     length = NULL;
 
 DROP TABLE wuppertal_roads_topology_vertices_pgr;
+
+-- Ansatz nach https://docs.pgrouting.org/2.2/en/src/topology/doc/pgr_nodeNetwork.html#pgr-node-network
+select * from pgr_nodenetwork('wuppertal_roads_topology', 1.0, 'osm_id', 'way', 'noded');
+
+select pgr_createTopology('wuppertal_roads_topology_noded', 1.00, 'way');
+
+select pgr_analyzegraph('wuppertal_roads_topology_noded', 1.0, 'way');
+
+ALTER TABLE wuppertal_roads_topology_noded ADD COLUMN length DOUBLE PRECISION;
+UPDATE wuppertal_roads_topology_noded SET length = ST_Length(ST_Transform(way, 4326)::geography);
+
+SELECT ST_AsGeoJSON(way)
+FROM wuppertal_roads_topology_noded
+WHERE old_id IN (SELECT edge FROM pgr_dijkstra('SELECT old_id AS id, source, target, length as cost FROM wuppertal_roads_topology_noded',
+    1287,  -- Startknoten
+    1938, -- Zielknoten
+    directed := false));
