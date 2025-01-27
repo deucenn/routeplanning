@@ -4,7 +4,7 @@ from geoalchemy2 import Geometry
 
 app = Flask(__name__)
 
-engine = create_engine('postgresql://user:password@host:port/database')
+engine = create_engine('postgresql://user:password@host:port/database') # Anpassen der Database-Verbindung
 
 print("Connection to database established")
 
