@@ -336,3 +336,20 @@ WHERE old_id IN (SELECT edge FROM pgr_dijkstra('SELECT old_id AS id, source, tar
     1287,  -- Startknoten
     1938, -- Zielknoten
     directed := false));
+
+------------------------------------------------------
+-- Ansatz nach: https://gis.stackexchange.com/questions/104599/osm2pgsql-missing-coordinates
+SELECT ST_AsText(way) FROM wuppertal_roads_topology LIMIT 1;
+
+-- Ausgabe als GPS-Koordinaten
+SELECT
+    ST_X(ST_Transform(ST_StartPoint(geom), 4326)) AS lon_start,
+    ST_Y(ST_Transform(ST_StartPoint(geom), 4326)) AS lat_start,
+    ST_X(ST_Transform(ST_EndPoint(geom), 4326)) AS lon_end,
+    ST_Y(ST_Transform(ST_EndPoint(geom), 4326)) AS lat_end
+FROM (
+    SELECT 'SRID=3857;LINESTRING(784980.6548612369 6666049.865171235,785054.8604337997 6666084.707513016,785228.9084576549 6666177.123141654)'::geometry AS geom
+) AS subquery;
+
+-- Visualisierung in Google Maps
+https://www.google.com/maps/dir/51.2523,7.0516/51.2530,7.0538
