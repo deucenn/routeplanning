@@ -1,36 +1,94 @@
 from flask import Flask, jsonify, request
-from sqlalchemy import create_engine
-from geoalchemy2 import Geometry
+from sqlalchemy import create_engine, text
+from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
+from flask_cors import CORS  # Für Cross-Origin-Anfragen
 
 app = Flask(__name__)
+CORS(app)  # Aktiviert CORS
 
-engine = create_engine('postgresql://user:password@host:port/database') # Anpassen der Database-Verbindung
+# Datenbankverbindung
+engine = create_engine('postgresql://osmuser:postgis123-@localhost:57001/osmdb')
 
-print("Connection to database established")
+# Geocoding-Service
+geolocator = Nominatim(user_agent="routing_app")
+
+def geocode_address(address):
+    try:
+        location = geolocator.geocode(address)
+        if location:
+            return location.latitude, location.longitude
+        else:
+            return None
+    except GeocoderTimedOut:
+        return None
+
+@app.route('/', methods=['GET'])
+def hello():
+    return jsonify({"message": "Server runs!"})
 
 @app.route('/route', methods=['GET'])
 def get_route():
-    start_point = request.args.get('start')  # z.B. 'SRID=4326;POINT(10.0 50.0)'
-    end_point = request.args.get('end')
+    try:
+        with engine.connect() as conn:
+            print("Connection to database established successfully.")
+    except Exception as e:
+        print(f"Failed to connect to database: {e}")
 
-    # SQL-Abfrage erstellen (dynamisch mit start_point und end_point)
-    sql_query = f"""
-        SELECT ST_AsGeoJSON(ST_MakeLine(n1.geom, n2.geom)) AS route, n1.id AS start_node_id, n2.id AS end_node_id
-        FROM nodes n1, nodes n2
-        WHERE n1.id = {start_node_id} AND n2.id = {end_node_id}
-    """
+    start_address = request.args.get('start_address')
+    end_address = request.args.get('end_address')
+
+    # Adressen in Koordinaten umwandeln
+    start_coords = geocode_address(start_address)
+    end_coords = geocode_address(end_address)
+
+    if not start_coords or not end_coords:
+        return jsonify({"error": "Could not geocode one or both addresses"}), 400
+
+    # Koordinaten in WKT-Punkte umwandeln
+    start_point = f"SRID=4326;POINT({start_coords[1]} {start_coords[0]})"
+    end_point = f"SRID=4326;POINT({end_coords[1]} {end_coords[0]})"
+
+    # SQL-Abfrage: pgr_dijkstra
+    sql_query = text("""
+    WITH route AS (
+        SELECT edge
+        FROM pgr_dijkstra(
+            'SELECT osm_id AS id, source, target, length AS cost FROM wuppertal_roads_topology',
+            (
+                SELECT id 
+                FROM wuppertal_roads_topology_vertices_pgr 
+                ORDER BY the_geom <-> ST_Transform(ST_GeomFromText(:start_point, 4326), 3857) 
+                LIMIT 1
+            ),
+            (
+                SELECT id 
+                FROM wuppertal_roads_topology_vertices_pgr 
+                ORDER BY the_geom <-> ST_Transform(ST_GeomFromText(:end_point, 4326), 3857) 
+                LIMIT 1
+            ),
+            directed := false
+        )
+    )
+    SELECT ST_AsGeoJSON(ST_Union(way)) AS route
+    FROM wuppertal_roads_topology
+    WHERE osm_id IN (SELECT edge FROM route);
+""")
 
 
-    with engine.connect() as conn:
-        result = conn.execute(sql_query)
-        rows = result.fetchall()
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(sql_query, {"start_point": start_point, "end_point": end_point})
+            rows = result.fetchall()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    print("Query send")
-
-    # Ergebnis in JSON umwandeln
-
-    return jsonify(result)
+    # Ergebnis in GeoJSON-Format umwandeln
+    if rows:
+        route_geojson = rows[0][0]
+        return jsonify({"route": route_geojson})
+    else:
+        return jsonify({"error": "No route found"}), 404
 
 if __name__ == '__main__':
     app.run(debug=True)
-
