@@ -21,7 +21,8 @@
         display: flex;
         gap: 10px;
       }
-      input, button {
+      input,
+      button {
         padding: 8px;
         font-size: 14px;
         border: 1px solid #ccc;
@@ -39,13 +40,19 @@
   </head>
   <body>
     <div class="controls">
-      <input id="startAddress" type="text" placeholder="Startadresse eingeben" />
+      <input
+        id="startAddress"
+        type="text"
+        placeholder="Startadresse eingeben"
+      />
       <input id="endAddress" type="text" placeholder="Zieladresse eingeben" />
       <button id="routeButton">Route anzeigen</button>
     </div>
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
+
     <script>
       // Leaflet-Karte initialisieren
       const map = L.map("map").setView([51.1657, 10.4515], 6); // Deutschland-Zentrierung
@@ -57,44 +64,79 @@
       }).addTo(map);
 
       // Event-Listener für den "Route anzeigen"-Button
-      document.getElementById("routeButton").addEventListener("click", async () => {
-        const startAddress = document.getElementById("startAddress").value;
-        const endAddress = document.getElementById("endAddress").value;
+      document
+        .getElementById("routeButton")
+        .addEventListener("click", async () => {
+          const startAddress = document.getElementById("startAddress").value;
+          const endAddress = document.getElementById("endAddress").value;
 
-        if (!startAddress || !endAddress) {
-          alert("Bitte sowohl Start- als auch Zieladresse eingeben!");
-          return;
-        }
-
-        try {
-          // Anfrage an das Backend senden
-          const response = await fetch(
-            `/route?start_address=${encodeURIComponent(startAddress)}&end_address=${encodeURIComponent(endAddress)}`
-          );
-          const data = await response.json();
-
-          if (response.ok) {
-            // Bestehende Routen löschen
-            map.eachLayer((layer) => {
-              if (layer instanceof L.Polyline) {
-                map.removeLayer(layer);
-              }
-            });
-
-            // Route anzeigen
-            const route = data.route; // GeoJSON-Daten
-            const coords = route.map((point) => [point.lat, point.lon]);
-
-            const polyline = L.polyline(coords, { color: "blue" }).addTo(map);
-            map.fitBounds(polyline.getBounds());
-          } else {
-            alert(data.error || "Ein Fehler ist aufgetreten.");
+          if (!startAddress || !endAddress) {
+            alert("Bitte sowohl Start- als auch Zieladresse eingeben!");
+            return;
           }
-        } catch (error) {
-          console.error("Fehler:", error);
-          alert("Fehler beim Abrufen der Route.");
-        }
-      });
+
+          try {
+            // Anfrage an das Backend senden
+            const response = await fetch(
+              `http://127.0.0.1:5000/route?start_address=${encodeURIComponent(
+                startAddress
+              )}&end_address=${encodeURIComponent(endAddress)}`
+            );
+            const data = await response.json();
+
+            if (response.ok) {
+              // Bestehende Routen entfernen
+              map.eachLayer((layer) => {
+                if (layer instanceof L.Polyline || layer instanceof L.GeoJSON) {
+                  map.removeLayer(layer);
+                }
+              });
+
+              // 🔹 1. GeoJSON korrekt parsen (doppelte JSON-Struktur auflösen)
+              const routeGeoJSON = JSON.parse(data.route);
+
+              console.log("GeoJSON aus Backend:", routeGeoJSON);
+
+              // 🔹 2. EPSG:3857 in EPSG:4326 umrechnen
+              function convertToLatLng(coords) {
+                return coords.map((line) =>
+                  line.map(([x, y]) => proj4("EPSG:3857", "EPSG:4326", [x, y]))
+                );
+              }
+
+              const convertedCoordinates = convertToLatLng(
+                routeGeoJSON.coordinates
+              );
+
+              console.log("Umgerechnete Koordinaten:", convertedCoordinates);
+
+              // 🔹 3. GeoJSON-Objekt für Leaflet korrekt erstellen
+              const geoJSONFeature = {
+                type: "Feature",
+                geometry: {
+                  type: "MultiLineString",
+                  coordinates: convertedCoordinates,
+                },
+              };
+
+              // 🔹 4. Route auf der Karte anzeigen
+              const geoJSONLayer = L.geoJSON(geoJSONFeature, {
+                style: {
+                  color: "blue",
+                  weight: 4,
+                },
+              }).addTo(map);
+
+              // 🔹 5. Karte an Route anpassen
+              map.fitBounds(geoJSONLayer.getBounds());
+            } else {
+              alert(data.error || "Ein Fehler ist aufgetreten.");
+            }
+          } catch (error) {
+            console.error("Fehler:", error);
+            alert("Fehler beim Abrufen der Route.");
+          }
+        });
     </script>
   </body>
 </html>
