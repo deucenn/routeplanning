@@ -54,8 +54,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
 
     <script>
-      // Leaflet-Karte initialisieren
-      const map = L.map("map").setView([51.1657, 10.4515], 6); // Deutschland-Zentrierung
+      // Leaflet-Karte initialisieren und auf Deutschland zentrieren
+      const map = L.map("map").setView([51.1657, 10.4515], 6); 
 
       // OpenStreetMap-Tiles hinzufügen
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -92,12 +92,12 @@
                 }
               });
 
-              // 🔹 1. GeoJSON korrekt parsen (doppelte JSON-Struktur auflösen)
+              // GeoJSON parsen 
               const routeGeoJSON = JSON.parse(data.route);
 
               console.log("GeoJSON aus Backend:", routeGeoJSON);
 
-              // 🔹 2. EPSG:3857 in EPSG:4326 umrechnen
+              // EPSG:3857 in EPSG:4326 umrechnen
               function convertToLatLng(coords) {
                 return coords.map((line) =>
                   line.map(([x, y]) => proj4("EPSG:3857", "EPSG:4326", [x, y]))
@@ -110,7 +110,7 @@
 
               console.log("Umgerechnete Koordinaten:", convertedCoordinates);
 
-              // 🔹 3. GeoJSON-Objekt für Leaflet korrekt erstellen
+              // GeoJSON-Objekt für Leaflet erstellen
               const geoJSONFeature = {
                 type: "Feature",
                 geometry: {
@@ -119,7 +119,7 @@
                 },
               };
 
-              // 🔹 4. Route auf der Karte anzeigen
+              // Route auf der Karte anzeigen
               const geoJSONLayer = L.geoJSON(geoJSONFeature, {
                 style: {
                   color: "blue",
@@ -127,7 +127,7 @@
                 },
               }).addTo(map);
 
-              // 🔹 5. Karte an Route anpassen
+              // Karte an Route anpassen
               map.fitBounds(geoJSONLayer.getBounds());
             } else {
               alert(data.error || "Ein Fehler ist aufgetreten.");

@@ -2,15 +2,15 @@ from flask import Flask, jsonify, request
 from sqlalchemy import create_engine, text
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut
-from flask_cors import CORS  # Für Cross-Origin-Anfragen
+from flask_cors import CORS  
 
 app = Flask(__name__)
-CORS(app)  # Aktiviert CORS
+CORS(app)  
 
-# Datenbankverbindung
+#  Datenbankverbindung herstellen
 engine = create_engine('postgresql://osmuser:postgis123-@localhost:57001/osmdb')
 
-# Geocoding-Service
+# Geocoding-Service initialisieren und defininieren
 geolocator = Nominatim(user_agent="routing_app")
 
 def geocode_address(address):
@@ -34,7 +34,7 @@ def get_route():
             print("Connection to database established successfully.")
     except Exception as e:
         print(f"Failed to connect to database: {e}")
-
+    # Adressen vom Frontend aufnehmen
     start_address = request.args.get('start_address')
     end_address = request.args.get('end_address')
 
@@ -45,7 +45,7 @@ def get_route():
     if not start_coords or not end_coords:
         return jsonify({"error": "Could not geocode one or both addresses"}), 400
 
-    # Koordinaten in WKT-Punkte umwandeln
+    # Koordinaten in EPSG:4326 umwandeln
     start_point = f"SRID=4326;POINT({start_coords[1]} {start_coords[0]})"
     end_point = f"SRID=4326;POINT({end_coords[1]} {end_coords[0]})"
 
@@ -76,6 +76,7 @@ def get_route():
 """)
 
 
+    # SQL-Abfrage ausführen und Ergebnis auslesen
     try:
         with engine.connect() as conn:
             result = conn.execute(sql_query, {"start_point": start_point, "end_point": end_point})
@@ -83,7 +84,7 @@ def get_route():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-    # Ergebnis in GeoJSON-Format umwandeln
+    # Ergebnis in GeoJSON-Format umwandeln und weiterleiten an Frontend
     if rows:
         route_geojson = rows[0][0]
         return jsonify({"route": route_geojson})
