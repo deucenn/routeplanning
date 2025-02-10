@@ -21,7 +21,8 @@
         display: flex;
         gap: 10px;
       }
-      input, button {
+      input,
+      button {
         padding: 8px;
         font-size: 14px;
         border: 1px solid #ccc;
@@ -39,7 +40,11 @@
   </head>
   <body>
     <div class="controls">
-      <input id="startAddress" type="text" placeholder="Startadresse eingeben" />
+      <input
+        id="startAddress"
+        type="text"
+        placeholder="Startadresse eingeben"
+      />
       <input id="endAddress" type="text" placeholder="Zieladresse eingeben" />
       <button id="routeButton">Route anzeigen</button>
     </div>
@@ -50,6 +55,8 @@
       // Leaflet-Karte initialisieren
       const map = L.map("map").setView([51.1657, 10.4515], 6); // Deutschland-Zentrierung
 
+      console.log(typeof proj4); // Sollte "function" ausgeben, wenn die Bibliothek korrekt geladen wurde
+
       // OpenStreetMap-Tiles hinzufügen
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 18,
@@ -57,44 +64,68 @@
       }).addTo(map);
 
       // Event-Listener für den "Route anzeigen"-Button
-      document.getElementById("routeButton").addEventListener("click", async () => {
-        const startAddress = document.getElementById("startAddress").value;
-        const endAddress = document.getElementById("endAddress").value;
+      document
+        .getElementById("routeButton")
+        .addEventListener("click", async () => {
+          const startAddress = document.getElementById("startAddress").value;
+          const endAddress = document.getElementById("endAddress").value;
 
-        if (!startAddress || !endAddress) {
-          alert("Bitte sowohl Start- als auch Zieladresse eingeben!");
-          return;
-        }
-
-        try {
-          // Anfrage an das Backend senden
-          const response = await fetch(
-            `/route?start_address=${encodeURIComponent(startAddress)}&end_address=${encodeURIComponent(endAddress)}`
-          );
-          const data = await response.json();
-
-          if (response.ok) {
-            // Bestehende Routen löschen
-            map.eachLayer((layer) => {
-              if (layer instanceof L.Polyline) {
-                map.removeLayer(layer);
-              }
-            });
-
-            // Route anzeigen
-            const route = data.route; // GeoJSON-Daten
-            const coords = route.map((point) => [point.lat, point.lon]);
-
-            const polyline = L.polyline(coords, { color: "blue" }).addTo(map);
-            map.fitBounds(polyline.getBounds());
-          } else {
-            alert(data.error || "Ein Fehler ist aufgetreten.");
+          if (!startAddress || !endAddress) {
+            alert("Bitte sowohl Start- als auch Zieladresse eingeben!");
+            return;
           }
-        } catch (error) {
-          console.error("Fehler:", error);
-          alert("Fehler beim Abrufen der Route.");
-        }
-      });
+
+          try {
+            // Anfrage an das Backend senden
+            const response = await fetch(
+              `http://127.0.0.1:5000/route?start_address=${encodeURIComponent(
+                startAddress
+              )}&end_address=${encodeURIComponent(endAddress)}`
+            );
+            const data = await response.json();
+
+            if (response.ok) {
+              // Bestehende Routen löschen
+              map.eachLayer((layer) => {
+                if (layer instanceof L.Polyline || layer instanceof L.GeoJSON) {
+                  map.removeLayer(layer);
+                }
+              });
+
+              // GeoJSON-Daten verarbeiten
+              const routeGeoJSON = JSON.parse(data.route); // Das Backend liefert GeoJSON-Daten
+
+              console.log(routeGeoJSON);
+
+              // EPSG:3857-Koordinaten in Leaflet-Projektion konvertieren
+              function convertToLatLng(coordinates) {
+                return coordinates.map(
+                  (line) => line.map(([x, y]) => L.latLng(y, x)) // Reihenfolge tauschen (Y, X)
+                );
+              }
+
+              const convertedCoordinates = convertToLatLng(routeGeoJSON.coordinates);
+              console.log(convertedCoordinates);
+
+              // Route auf der Karte anzeigen
+              const geoJSONLayer = L.geoJSON(routeGeoJSON, {
+                style: {
+                  color: "blue",
+                  weight: 4,
+                },
+              }).addTo(map);
+
+              // Karte an die Route anpassen
+              map.fitBounds(geoJSONLayer.getBounds());
+            } else {
+              alert(data.error || "Ein Fehler ist aufgetreten.");
+            }
+          } catch (error) {
+            console.error("Fehler:", error);
+            alert("Fehler beim Abrufen der Route.");
+          }
+        });
     </script>
   </body>
 </html>
+
