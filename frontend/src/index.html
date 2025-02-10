@@ -51,9 +51,11 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.7.5/proj4.js"></script>
+
     <script>
-      // Leaflet-Karte initialisieren
-      const map = L.map("map").setView([51.1657, 10.4515], 6); // Deutschland-Zentrierung
+      // Leaflet-Karte initialisieren und auf Deutschland zentrieren
+      const map = L.map("map").setView([51.1657, 10.4515], 6); 
 
       console.log(typeof proj4); // Sollte "function" ausgeben, wenn die Bibliothek korrekt geladen wurde
 
@@ -85,13 +87,18 @@
             const data = await response.json();
 
             if (response.ok) {
+<<<<<<< HEAD
               // Bestehende Routen löschen
+=======
+              // Bestehende Routen entfernen
+>>>>>>> 690f6b07147498ef39c48f7a52ef4efbeb616999
               map.eachLayer((layer) => {
                 if (layer instanceof L.Polyline || layer instanceof L.GeoJSON) {
                   map.removeLayer(layer);
                 }
               });
 
+<<<<<<< HEAD
               // GeoJSON-Daten verarbeiten
               const routeGeoJSON = JSON.parse(data.route); // Das Backend liefert GeoJSON-Daten
 
@@ -109,13 +116,48 @@
 
               // Route auf der Karte anzeigen
               const geoJSONLayer = L.geoJSON(routeGeoJSON, {
+=======
+              // GeoJSON parsen 
+              const routeGeoJSON = JSON.parse(data.route);
+
+              console.log("GeoJSON aus Backend:", routeGeoJSON);
+
+              // EPSG:3857 in EPSG:4326 umrechnen
+              function convertToLatLng(coords) {
+                return coords.map((line) =>
+                  line.map(([x, y]) => proj4("EPSG:3857", "EPSG:4326", [x, y]))
+                );
+              }
+
+              const convertedCoordinates = convertToLatLng(
+                routeGeoJSON.coordinates
+              );
+
+              console.log("Umgerechnete Koordinaten:", convertedCoordinates);
+
+              // GeoJSON-Objekt für Leaflet erstellen
+              const geoJSONFeature = {
+                type: "Feature",
+                geometry: {
+                  type: "MultiLineString",
+                  coordinates: convertedCoordinates,
+                },
+              };
+
+              // Route auf der Karte anzeigen
+              const geoJSONLayer = L.geoJSON(geoJSONFeature, {
+>>>>>>> 690f6b07147498ef39c48f7a52ef4efbeb616999
                 style: {
                   color: "blue",
                   weight: 4,
                 },
               }).addTo(map);
 
+<<<<<<< HEAD
               // Karte an die Route anpassen
+=======
+              // Karte an Route anpassen
+>>>>>>> 690f6b07147498ef39c48f7a52ef4efbeb616999
               map.fitBounds(geoJSONLayer.getBounds());
             } else {
               alert(data.error || "Ein Fehler ist aufgetreten.");

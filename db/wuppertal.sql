@@ -29,7 +29,7 @@ SELECT osm_id, source, target FROM wuppertal_roads_topology
     WHERE osm_id IN (240943960, 477449989, 193966767)
     ORDER BY osm_id;
 
--- Dijkastra-Algorithmus anwenden
+-- Dijkastra-Algorithmus anwenden mit Beispiel-ids
 SELECT * FROM pgr_dijkstra('
     SELECT osm_id AS id,
          source,
@@ -154,6 +154,13 @@ WHERE osm_id IN (SELECT edge FROM pgr_dijkstra('SELECT osm_id AS id, source, tar
     158099, -- Zielknoten
     directed := false));
 
+<<<<<<< HEAD
+=======
+------------------------------------------------------
+-- Ansatz nach: https://gis.stackexchange.com/questions/104599/osm2pgsql-missing-coordinates
+SELECT ST_AsText(way) FROM wuppertal_roads_topology LIMIT 1;
+
+>>>>>>> 690f6b07147498ef39c48f7a52ef4efbeb616999
 -- Ausgabe als GPS-Koordinaten
 SELECT
     ST_X(ST_Transform(ST_StartPoint(geom), 4326)) AS lon_start,
